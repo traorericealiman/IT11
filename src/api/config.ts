@@ -1,7 +1,8 @@
 // src/config.ts
 const BASE_URL = 'https://it11-ajlp.onrender.com';
 
-export const API = {
+export const API: Record<string, any> = {
+  baseUrl:        BASE_URL,
   register:       `${BASE_URL}/register`,
   login:          `${BASE_URL}/login`,
   requestPayment: `${BASE_URL}/payment/request`,

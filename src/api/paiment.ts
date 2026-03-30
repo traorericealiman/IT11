@@ -1,17 +1,14 @@
 // src/api/payment.ts
 import CryptoJS from 'crypto-js';
 import { API, WAVE_LINKS, AMOUNTS } from './config';
+import type { PaymentPayload } from '../types';
 
-const AES_KEY = 'TaCleSecreteSuperRobusteDesIT11!';
+export type { PaymentPayload };
+
+const AES_KEY = import.meta.env.VITE_AES_KEY as string;
 
 function encryptAES(value: string): string {
   return CryptoJS.AES.encrypt(value, AES_KEY).toString();
-}
-
-export interface PaymentPayload {
-  student_id:   string;
-  quantity:     number;
-  sender_phone: string;
 }
 
 export async function initiatePayment(payload: PaymentPayload): Promise<void> {

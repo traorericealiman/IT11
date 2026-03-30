@@ -1,8 +1,11 @@
 // src/api/connexion.ts
 import CryptoJS from 'crypto-js';
 import { API } from './config';
+import type { LoginPayload, LoginResponse } from '../types';
 
-const AES_KEY = 'TaCleSecreteSuperRobusteDesIT11!';
+export type { LoginPayload, LoginResponse };
+
+const AES_KEY = import.meta.env.VITE_AES_KEY as string;
 
 function encryptAES(value: string): string {
   return CryptoJS.AES.encrypt(value, AES_KEY).toString();
@@ -11,20 +14,6 @@ function encryptAES(value: string): string {
 function hashSHA256(value: string): string {
   return CryptoJS.SHA256(value).toString(CryptoJS.enc.Hex);
 }
-
-
-export interface LoginPayload {
-  phone:    string;   
-  password: string;   
-}
-
-export interface LoginResponse {
-  token:      string;
-  id:         string;
-  first_name: string;
-  last_name:  string;
-}
-
 
 export async function loginUser(payload: LoginPayload): Promise<LoginResponse> {
   const body = {
@@ -54,11 +43,4 @@ export async function loginUser(payload: LoginPayload): Promise<LoginResponse> {
 
 export function getToken(): string | null {
   return localStorage.getItem('token');
-}
-
-export function logout(): void {
-  localStorage.removeItem('token');
-  localStorage.removeItem('userId');
-  localStorage.removeItem('firstName');
-  localStorage.removeItem('lastName');
 }

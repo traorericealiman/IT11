@@ -11,11 +11,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.4",
-    "bcryptjs": "^3.0.3",
     "crypto-js": "^4.2.0",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
+    "react-barcode": "^1.6.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.13.2"
   },

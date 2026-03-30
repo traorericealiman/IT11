@@ -1,21 +1,11 @@
 // src/api/inscription.ts
 import CryptoJS from 'crypto-js';
 import { API } from './config';
+import type { RegisterPayload, ValidationError } from '../types';
 
-export interface RegisterPayload {
-  firstName: string;
-  lastName:  string;
-  phone:     string;
-  password:  string;
-  confirm:   string;
-}
+export type { RegisterPayload, ValidationError };
 
-export interface ValidationError {
-  field:   string;
-  message: string;
-}
-
-const SECRET_KEY       = 'TaCleSecreteSuperRobusteDesIT11!';
+const SECRET_KEY       = import.meta.env.VITE_AES_KEY as string;
 const PASSWORD_MIN_LEN = 8;
 const PASSWORD_REGEX   = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
 const PHONE_REGEX      = /^\+?225\s?\d{2}\s?\d{2}\s?\d{2}\s?\d{2}\s?\d{2}$/;
