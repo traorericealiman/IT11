@@ -1,10 +1,11 @@
 # backend/app.py
 from flask import Flask
 from flask_cors import CORS
-from supabase import create_client, Client
 import os
+
 from inscription import register_bp
 from connexion   import login_bp
+from paiment     import payment_bp
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
@@ -14,6 +15,7 @@ CORS(app)
 
 app.register_blueprint(register_bp)   
 app.register_blueprint(login_bp)      
+app.register_blueprint(payment_bp)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
