@@ -17,9 +17,9 @@ from cryptography.hazmat.primitives.padding import PKCS7
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-SECRET_KEY   = os.environ.get("AES_SECRET_KEY", "TaCleSecreteSuperRobusteDesIT11!")
-JWT_SECRET   = os.environ.get("JWT_SECRET", "JWT_Secret_P11_2024!")
-JWT_EXPIRY_H = int(os.environ.get("JWT_EXPIRY_HOURS", 168))  # 7 jours = 168 heures
+SECRET_KEY   = os.environ["AES_SECRET_KEY"]
+JWT_SECRET   = os.environ["JWT_SECRET"]
+JWT_EXPIRY_H = int(os.environ.get("JWT_EXPIRY_HOURS", 168)) 
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 

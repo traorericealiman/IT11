@@ -1,11 +1,10 @@
-# backend/app.py
-from flask import Blueprint, Flask, request, jsonify
-from flask_cors import CORS
+# backend/payment.py
+from flask import Blueprint, request, jsonify
 from supabase import create_client, Client
-import bcrypt
-import os
 import base64
 import hashlib
+import os
+import datetime
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.padding import PKCS7
 
@@ -16,25 +15,20 @@ from cryptography.hazmat.primitives.padding import PKCS7
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-SECRET_KEY   = os.environ["AES_SECRET_KEY"]
-
+SECRET_KEY = os.environ["AES_SECRET_KEY"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-register_bp = Blueprint("register", __name__)
+payment_bp = Blueprint("payment", __name__)
 
-
-app = Flask(__name__)
-CORS(app)
+# Montants fixes avec frais Wave 1% inclus
+VALID_AMOUNTS = {1: 5050, 2: 10100, 3: 15150}
 
 
 # ══════════════════════════════════════════════════════════════
-#  UTILITAIRES AES  (compatible CryptoJS / format OpenSSL)
-#  CryptoJS produit : base64( b"Salted__" + salt[8] + cipher )
-#  Clé + IV dérivés via EVP_BytesToKey (MD5 itéré)
+#  UTILITAIRES AES  (copie exacte de connexion.py)
 # ══════════════════════════════════════════════════════════════
 
 def _derive_key_iv(password: bytes, salt: bytes):
-    """Dérive une clé AES-256 (32 B) et un IV (16 B) à la manière d'OpenSSL."""
     d, d_i = b"", b""
     while len(d) < 48:
         d_i = hashlib.md5(d_i + password + salt).digest()
@@ -43,32 +37,20 @@ def _derive_key_iv(password: bytes, salt: bytes):
 
 
 def decrypt_aes(ciphertext_b64: str) -> str | None:
-    """
-    Déchiffre une valeur chiffrée par CryptoJS.AES.encrypt(text, passphrase).
-    Retourne le texte clair ou None en cas d'erreur.
-    """
     try:
         raw = base64.b64decode(ciphertext_b64)
-
         if raw[:8] != b"Salted__":
-            raise ValueError("Header 'Salted__' absent — format CryptoJS inattendu.")
-
+            raise ValueError("Header 'Salted__' absent.")
         salt      = raw[8:16]
         encrypted = raw[16:]
-
-        key, iv = _derive_key_iv(SECRET_KEY.encode("utf-8"), salt)
-
+        key, iv   = _derive_key_iv(SECRET_KEY.encode("utf-8"), salt)
         cipher    = Cipher(algorithms.AES(key), modes.CBC(iv))
         decryptor = cipher.decryptor()
         padded    = decryptor.update(encrypted) + decryptor.finalize()
-
-        unpadder = PKCS7(128).unpadder()
-        plain    = unpadder.update(padded) + unpadder.finalize()
-
+        unpadder  = PKCS7(128).unpadder()
+        plain     = unpadder.update(padded) + unpadder.finalize()
         return plain.decode("utf-8")
-
-    except Exception as e:
-        app.logger.error("Erreur déchiffrement AES : %s", e)
+    except Exception:
         return None
 
 
@@ -79,7 +61,6 @@ def decrypt_aes(ciphertext_b64: str) -> str | None:
 def _bad(message: str, status: int = 400):
     return jsonify({"error": message}), status
 
-
 def _ok(message: str, data=None, status: int = 200):
     payload = {"message": message}
     if data is not None:
@@ -88,56 +69,92 @@ def _ok(message: str, data=None, status: int = 200):
 
 
 # ══════════════════════════════════════════════════════════════
-#  ROUTES
+#  ROUTE  POST /payment/request
 # ══════════════════════════════════════════════════════════════
 
-# ── INSCRIPTION ──────────────────────────────────────────────
-@register_bp.route("/register", methods=["POST"])
-def register():
+@payment_bp.route("/payment/request", methods=["POST"])
+def request_payment():
     body = request.get_json(silent=True)
     if not body:
         return _bad("Corps JSON manquant ou invalide.")
 
-    # 1. Déchiffrement des champs AES
-    first_name    = decrypt_aes(body.get("firstName", ""))
-    last_name     = decrypt_aes(body.get("lastName",  ""))
-    phone         = decrypt_aes(body.get("phone",     ""))
-    password_hash = body.get("password", "").strip()   # SHA-256 hex envoyé tel quel
+    # 1. Déchiffrement AES
+    student_id   = decrypt_aes(body.get("student_id",   ""))
+    quantity_str = decrypt_aes(body.get("quantity",     ""))
+    amount_str   = decrypt_aes(body.get("amount",       ""))
+    sender_phone = decrypt_aes(body.get("sender_phone", ""))
 
-    # 2. Validation
-    if not all([first_name, last_name, phone, password_hash]):
-        return _bad("Tous les champs sont obligatoires ou le déchiffrement a échoué.")
+    # 2. Validation déchiffrement
+    if not all([student_id, quantity_str, amount_str, sender_phone]):
+        return _bad("Déchiffrement échoué : données corrompues ou clé invalide.")
 
-    if len(password_hash) != 64:
-        return _bad("Format du mot de passe invalide.")
+    # 3. Conversion + validation des types
+    try:
+        quantity = int(quantity_str)
+        amount   = int(amount_str)
+    except ValueError:
+        return _bad("Format de quantité ou de montant invalide.")
 
-    # 3. Unicité du numéro de téléphone
-    existing = supabase.table("students").select("id").eq("phone", phone).execute()
-    if existing.data:
-        return _bad("Ce numéro de téléphone est déjà utilisé.", 409)
+    if quantity not in VALID_AMOUNTS:
+        return _bad(f"Quantité invalide. Valeurs acceptées : {list(VALID_AMOUNTS.keys())}.")
 
-    # 4. Hachage bcrypt du SHA-256 reçu
-    hashed_password = bcrypt.hashpw(
-        password_hash.encode("utf-8"),
-        bcrypt.gensalt(rounds=12)
-    ).decode("utf-8")
+    if amount != VALID_AMOUNTS[quantity]:
+        return _bad("Montant incohérent avec la quantité.")
 
-    # 5. Insertion en base
-    student = {
-        "first_name": first_name,
-        "last_name":  last_name,
-        "phone":      phone,
-        "password":   hashed_password,
+    # 4. Vérification que l'étudiant existe dans Supabase
+    student_result = (
+        supabase
+        .table("students")
+        .select("id, first_name, last_name")
+        .eq("id", student_id)
+        .limit(1)
+        .execute()
+    )
+    if not student_result.data:
+        return _bad("Étudiant introuvable.", 404)
+
+    # 5. Insertion du paiement en base
+    payment_data = {
+        "student_id":   student_id,
+        "quantity":     quantity,
+        "amount":       amount,
+        "sender_phone": sender_phone,
+        "status":       "pending",
+        "created_at":   datetime.datetime.utcnow().isoformat(),
     }
 
-    result = supabase.table("students").insert(student).execute()
+    insert_result = supabase.table("payments").insert(payment_data).execute()
 
-    return _ok("Inscription réussie !", data={"id": result.data[0].get("id")}, status=201)
+    if not insert_result.data:
+        return _bad("Erreur lors de l'enregistrement en base de données.", 500)
+
+    payment_id = insert_result.data[0]["id"]
+
+    return _ok(
+        "Paiement enregistré. Redirection Wave en cours.",
+        data={"payment_id": payment_id},
+        status=201,
+    )
+
 
 # ══════════════════════════════════════════════════════════════
-#  LANCEMENT
+#  ROUTE  POST /payment/approve/<request_id>
 # ══════════════════════════════════════════════════════════════
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+@payment_bp.route("/payment/approve/<request_id>", methods=["POST"])
+def approve_payment(request_id: str):
+    update_result = (
+        supabase
+        .table("payments")
+        .update({
+            "status":     "approved",
+            "updated_at": datetime.datetime.utcnow().isoformat(),
+        })
+        .eq("id", request_id)
+        .execute()
+    )
+
+    if not update_result.data:
+        return _bad("Paiement introuvable ou déjà traité.", 404)
+
+    return _ok("Paiement approuvé.", data={"payment_id": request_id})
