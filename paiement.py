@@ -117,7 +117,7 @@ def request_payment():
     payment_data = {
         "student_id":   student_id,
         "quantity":     quantity,
-        "amount":       amount,
+        "amount_paid":       amount,
         "sender_phone": sender_phone,
         "status":       "pending",
         "created_at":   datetime.datetime.utcnow().isoformat(),
