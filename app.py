@@ -7,6 +7,8 @@ import os
 # ── Blueprints ──────────────────────────────────────────────
 from inscription import register_bp
 from connexion   import login_bp
+from paiement    import paiement_bp
+
 
 
 # ══════════════════════════════════════════════════════════════
@@ -26,6 +28,8 @@ CORS(app)
 
 app.register_blueprint(register_bp)   # POST /register
 app.register_blueprint(login_bp)      
+app.register_blueprint(paiement_bp)   # POST /api/pay
+
 
 
 # ══════════════════════════════════════════════════════════════
