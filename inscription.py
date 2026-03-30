@@ -1,5 +1,5 @@
 # backend/app.py
-from flask import Flask, request, jsonify
+from flask import Blueprint, Flask, request, jsonify
 from flask_cors import CORS
 from supabase import create_client, Client
 import bcrypt
@@ -19,6 +19,9 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 SECRET_KEY   = os.environ.get("AES_SECRET_KEY", "TaCleSecreteSuperRobusteDesIT11!")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+register_bp = Blueprint("register", __name__)
+
 
 app = Flask(__name__)
 CORS(app)
@@ -89,7 +92,7 @@ def _ok(message: str, data=None, status: int = 200):
 # ══════════════════════════════════════════════════════════════
 
 # ── INSCRIPTION ──────────────────────────────────────────────
-@app.route("/register", methods=["POST"])
+@register_bp.route("/register", methods=["POST"])
 def register():
     body = request.get_json(silent=True)
     if not body:
