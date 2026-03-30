@@ -10,11 +10,6 @@ import datetime
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.padding import PKCS7
 
-
-# ══════════════════════════════════════════════════════════════
-#  CONFIGURATION
-# ══════════════════════════════════════════════════════════════
-
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 SECRET_KEY   = os.environ["AES_SECRET_KEY"]
@@ -24,11 +19,6 @@ JWT_EXPIRY_H = int(os.environ.get("JWT_EXPIRY_HOURS", 168))
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 login_bp = Blueprint("login", __name__)
-
-
-# ══════════════════════════════════════════════════════════════
-#  UTILITAIRES AES  (même implémentation que inscription.py)
-# ══════════════════════════════════════════════════════════════
 
 def _derive_key_iv(password: bytes, salt: bytes):
     d, d_i = b"", b""
@@ -55,11 +45,6 @@ def decrypt_aes(ciphertext_b64: str) -> str | None:
     except Exception:
         return None
 
-
-# ══════════════════════════════════════════════════════════════
-#  HELPERS
-# ══════════════════════════════════════════════════════════════
-
 def _bad(message: str, status: int = 400):
     return jsonify({"error": message}), status
 
@@ -81,22 +66,15 @@ def _generate_jwt(student: dict) -> str:
     }
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
-
-# ══════════════════════════════════════════════════════════════
-#  ROUTE  POST /login
-# ══════════════════════════════════════════════════════════════
-
 @login_bp.route("/login", methods=["POST"])
 def login():
     body = request.get_json(silent=True)
     if not body:
         return _bad("Corps JSON manquant ou invalide.")
 
-    # 1. Déchiffrement AES
-    phone         = decrypt_aes(body.get("phone", ""))
-    password_hash = body.get("password", "").strip()   # SHA-256 hex, haché côté client
+    phone = decrypt_aes(body.get("phone", ""))
+    password_hash = body.get("password", "").strip()   
 
-    # 2. Validation basique
     if not phone:
         return _bad("Numéro de téléphone invalide ou déchiffrement échoué.")
     if not password_hash:
@@ -104,7 +82,6 @@ def login():
     if len(password_hash) != 64:
         return _bad("Format du mot de passe invalide.")
 
-    # 3. Recherche dans Supabase par numéro de téléphone
     result = (
         supabase
         .table("students")
@@ -114,13 +91,11 @@ def login():
         .execute()
     )
 
-    # Message générique : ne pas révéler si c'est le n° ou le mdp qui est faux
     if not result.data:
         return _bad("Identifiants incorrects.", 401)
 
     student = result.data[0]
 
-    # 4. Vérification bcrypt
     stored_hash    = student["password"].encode("utf-8")
     attempt        = password_hash.encode("utf-8")
     password_valid = bcrypt.checkpw(attempt, stored_hash)
@@ -128,7 +103,6 @@ def login():
     if not password_valid:
         return _bad("Identifiants incorrects.", 401)
 
-    # 5. Génération du JWT (valide 7 jours)
     token = _generate_jwt(student)
 
     return _ok(

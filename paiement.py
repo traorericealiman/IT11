@@ -8,11 +8,6 @@ import datetime
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.padding import PKCS7
 
-
-# ══════════════════════════════════════════════════════════════
-#  CONFIGURATION
-# ══════════════════════════════════════════════════════════════
-
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 SECRET_KEY = os.environ["AES_SECRET_KEY"]
@@ -20,13 +15,8 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 payment_bp = Blueprint("payment", __name__)
 
-# Montants fixes avec frais Wave 1% inclus
 VALID_AMOUNTS = {1: 5050, 2: 10100, 3: 15150}
 
-
-# ══════════════════════════════════════════════════════════════
-#  UTILITAIRES AES  (copie exacte de connexion.py)
-# ══════════════════════════════════════════════════════════════
 
 def _derive_key_iv(password: bytes, salt: bytes):
     d, d_i = b"", b""
@@ -53,11 +43,6 @@ def decrypt_aes(ciphertext_b64: str) -> str | None:
     except Exception:
         return None
 
-
-# ══════════════════════════════════════════════════════════════
-#  HELPERS
-# ══════════════════════════════════════════════════════════════
-
 def _bad(message: str, status: int = 400):
     return jsonify({"error": message}), status
 
@@ -67,28 +52,20 @@ def _ok(message: str, data=None, status: int = 200):
         payload["data"] = data
     return jsonify(payload), status
 
-
-# ══════════════════════════════════════════════════════════════
-#  ROUTE  POST /payment/request
-# ══════════════════════════════════════════════════════════════
-
 @payment_bp.route("/payment/request", methods=["POST"])
 def request_payment():
     body = request.get_json(silent=True)
     if not body:
         return _bad("Corps JSON manquant ou invalide.")
 
-    # 1. Déchiffrement AES
     student_id   = decrypt_aes(body.get("student_id",   ""))
     quantity_str = decrypt_aes(body.get("quantity",     ""))
     amount_str   = decrypt_aes(body.get("amount",       ""))
     sender_phone = decrypt_aes(body.get("sender_phone", ""))
 
-    # 2. Validation déchiffrement
     if not all([student_id, quantity_str, amount_str, sender_phone]):
         return _bad("Déchiffrement échoué : données corrompues ou clé invalide.")
 
-    # 3. Conversion + validation des types
     try:
         quantity = int(quantity_str)
         amount   = int(amount_str)
@@ -101,7 +78,6 @@ def request_payment():
     if amount != VALID_AMOUNTS[quantity]:
         return _bad("Montant incohérent avec la quantité.")
 
-    # 4. Vérification que l'étudiant existe dans Supabase
     student_result = (
         supabase
         .table("students")
@@ -113,7 +89,6 @@ def request_payment():
     if not student_result.data:
         return _bad("Étudiant introuvable.", 404)
 
-    # 5. Insertion du paiement en base
     payment_data = {
         "student_id":   student_id,
         "quantity":     quantity,
