@@ -1,0 +1,79 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,500;1,300&family=Outfit:wght@200;400;600&display=swap');
+
+html {
+  scroll-behavior: smooth;
+}
+
+.font-garamond {
+  font-family: 'Cormorant Garamond', serif;
+}
+
+.font-outfit {
+  font-family: 'Outfit', sans-serif;
+}
+
+@keyframes slowZoom {
+  from { transform: scale(1); }
+  to { transform: scale(1.08); }
+}
+
+.hero-bg-zoom {
+  animation: slowZoom 22s infinite alternate;
+}
+
+@keyframes hikerBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.hiker-bob {
+  animation: hikerBob 2.2s ease-in-out infinite;
+}
+
+.leg-left {
+  animation: legL 0.65s ease-in-out infinite alternate;
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+}
+
+.leg-right {
+  animation: legR 0.65s ease-in-out infinite alternate;
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+}
+
+.arm-left {
+  animation: armL 0.65s ease-in-out infinite alternate;
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+}
+
+.arm-right {
+  animation: armR 0.65s ease-in-out infinite alternate;
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+}
+
+@keyframes legL {
+  from { transform: rotate(-14deg); }
+  to { transform: rotate(14deg); }
+}
+
+@keyframes legR {
+  from { transform: rotate(14deg); }
+  to { transform: rotate(-14deg); }
+}
+
+@keyframes armL {
+  from { transform: rotate(-14deg); }
+  to { transform: rotate(14deg); }
+}
+
+@keyframes armR {
+  from { transform: rotate(14deg); }
+  to { transform: rotate(-14deg); }
+}
+
+.price-transition {
+  transition: opacity 0.15s, transform 0.15s;
+}
