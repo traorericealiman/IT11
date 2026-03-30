@@ -1,28 +1,31 @@
 # backend/app.py
 from flask import Flask
 from flask_cors import CORS
+from supabase import create_client, Client
 import os
 
-from connexion import login_bp
+# ── Blueprints ──────────────────────────────────────────────
+from inscription import register_bp
+from connexion   import login_bp
 
 
 # ══════════════════════════════════════════════════════════════
-#  APPLICATION
+#  CONFIGURATION
 # ══════════════════════════════════════════════════════════════
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 app = Flask(__name__)
 CORS(app)
 
 
-from inscription import register, app as _insc_app
+# ══════════════════════════════════════════════════════════════
+#  ENREGISTREMENT DES ROUTES
+# ══════════════════════════════════════════════════════════════
 
-# Copie les routes de inscription.py dans notre app principale
-for rule in _insc_app.url_map.iter_rules():
-    view_func = _insc_app.view_functions[rule.endpoint]
-    app.add_url_rule(str(rule), rule.endpoint, view_func, methods=rule.methods)
-
-# ── /login : blueprint de connexion.py ──────────────────────
-app.register_blueprint(login_bp)
+app.register_blueprint(register_bp)   # POST /register
+app.register_blueprint(login_bp)      
 
 
 # ══════════════════════════════════════════════════════════════
