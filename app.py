@@ -4,8 +4,8 @@ from flask_cors import CORS
 import os
 
 from inscription import register_bp
-from connexion   import login_bp
-from Backend.paiement     import payment_bp
+from connexion import login_bp
+from paiement import payment_bp
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
