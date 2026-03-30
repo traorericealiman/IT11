@@ -123,7 +123,7 @@ def request_payment():
         "created_at":   datetime.datetime.utcnow().isoformat(),
     }
 
-    insert_result = supabase.table("payments").insert(payment_data).execute()
+    insert_result = supabase.table("payment_requests").insert(payment_data).execute()
 
     if not insert_result.data:
         return _bad("Erreur lors de l'enregistrement en base de données.", 500)
@@ -145,7 +145,7 @@ def request_payment():
 def approve_payment(request_id: str):
     update_result = (
         supabase
-        .table("payments")
+        .table("payment_requests")
         .update({
             "status":     "approved",
             "updated_at": datetime.datetime.utcnow().isoformat(),
