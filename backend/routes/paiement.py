@@ -206,6 +206,59 @@ def approve_payment(request_id: str):
 
 
 # ══════════════════════════════════════════════════════════════
+#  ROUTE  POST /payment/history
+# ══════════════════════════════════════════════════════════════
+
+@payment_bp.route("/payment/history", methods=["POST"])
+def get_student_payments():
+    """
+    Récupère l'historique de tous les paiements d'un étudiant.
+    Utilise POST pour passer l'ID chiffré dans le corps.
+    """
+    body = request.get_json(silent=True)
+    if not body:
+        return _bad("Corps JSON manquant ou invalide.")
+
+    student_id = decrypt_aes(body.get("student_id", ""))
+
+    if not student_id:
+        return _bad("ID étudiant introuvable ou déchiffrement échoué.", 401)
+
+    # Vérifier que l'étudiant existe
+    student_result = (
+        supabase
+        .table("students")
+        .select("id, first_name, last_name")
+        .eq("id", student_id)
+        .limit(1)
+        .execute()
+    )
+    if not student_result.data:
+        return _bad("Étudiant introuvable.", 404)
+
+    # Récupérer tous les paiements de cet étudiant
+    payments_result = (
+        supabase
+        .table("payment_requests")
+        .select("*")
+        .eq("student_id", student_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+
+    payments = payments_result.data if payments_result.data else []
+
+    return _ok(
+        "Paiements récupérés.",
+        data={
+            "student": student_result.data[0],
+            "total":   len(payments),
+            "payments": payments,
+        },
+    )
+
+
+# ══════════════════════════════════════════════════════════════
 #  ROUTE  POST /tickets
 # ══════════════════════════════════════════════════════════════
 
