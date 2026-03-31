@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify
 from supabase import create_client, Client
 import os
 import datetime
-import random
+import secrets
 from ..utils.crypto import decrypt_aes
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -26,6 +26,32 @@ def _ok(message: str, data=None, status: int = 200):
         payload["data"] = data
     return jsonify(payload), status
 
+
+def _now_iso() -> str:
+    """Retourne l'heure UTC actuelle en ISO 8601 (compatible Python 3.12+)."""
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def _check_admin(req) -> bool:
+    """Vérifie que la requête provient d'un admin via le header Authorization."""
+    auth_header = req.headers.get("Authorization", "")
+    admin_token = os.environ.get("ADMIN_SECRET", "")
+    return bool(admin_token) and auth_header == f"Bearer {admin_token}"
+
+
+def _generate_unique_ticket_code(existing_codes: set) -> str:
+    """Génère un code à 6 chiffres unique par rapport aux codes déjà générés."""
+    for _ in range(100):  # 100 tentatives max pour éviter une boucle infinie
+        code = str(secrets.randbelow(900000) + 100000)
+        if code not in existing_codes:
+            existing_codes.add(code)
+            return code
+    raise RuntimeError("Impossible de générer un code unique après 100 tentatives.")
+
+
+# ══════════════════════════════════════════════════════════════
+#  ROUTE  POST /payment/request
+# ══════════════════════════════════════════════════════════════
 
 @payment_bp.route("/payment/request", methods=["POST"])
 def request_payment():
@@ -70,7 +96,7 @@ def request_payment():
         "amount_paid":  amount,
         "sender_phone": sender_phone,
         "status":       "pending",
-        "created_at":   datetime.datetime.utcnow().isoformat(),
+        "created_at":   _now_iso(),
     }
 
     insert_result = supabase.table("payment_requests").insert(payment_data).execute()
@@ -87,9 +113,18 @@ def request_payment():
     )
 
 
+# ══════════════════════════════════════════════════════════════
+#  ROUTE  POST /payment/approve/<request_id>
+# ══════════════════════════════════════════════════════════════
+
 @payment_bp.route("/payment/approve/<request_id>", methods=["POST"])
 def approve_payment(request_id: str):
-    # 1. Obtenir les détails de la requête de paiement
+
+    # 1. Vérification admin
+    if not _check_admin(request):
+        return _bad("Non autorisé. Token admin requis.", 401)
+
+    # 2. Obtenir les détails de la requête de paiement
     payment_result = (
         supabase
         .table("payment_requests")
@@ -104,16 +139,31 @@ def approve_payment(request_id: str):
 
     payment = payment_result.data[0]
 
-    if payment.get("status") == "approved":
-        return _bad("Ce paiement a déjà été approuvé.", 409)
+    # 3. Vérifier que le statut est bien "pending"
+    if payment.get("status") != "pending":
+        return _bad(
+            f"Ce paiement ne peut pas être approuvé (statut actuel : {payment.get('status')}).",
+            409,
+        )
 
-    # 2. Mettre à jour le statut du paiement
+    # 4. Vérifier qu'aucun ticket n'a déjà été généré pour ce paiement (protection double-appel)
+    existing_tickets = (
+        supabase
+        .table("tickets")
+        .select("id")
+        .eq("payment_id", request_id)
+        .execute()
+    )
+    if existing_tickets.data:
+        return _bad("Des tickets ont déjà été générés pour ce paiement.", 409)
+
+    # 5. Mettre à jour le statut du paiement
     update_result = (
         supabase
         .table("payment_requests")
         .update({
-            "status": "approved",
-            "updated_at": datetime.datetime.utcnow().isoformat(),
+            "status":     "approved",
+            "updated_at": _now_iso(),
         })
         .eq("id", request_id)
         .execute()
@@ -122,48 +172,48 @@ def approve_payment(request_id: str):
     if not update_result.data:
         return _bad("Erreur lors de l'approbation du paiement.", 500)
 
-    # 3. Générer les tickets
-    quantity = payment.get("quantity", 1)
+    # 6. Générer les tickets avec des codes uniques
+    quantity   = payment.get("quantity", 1)
     student_id = payment.get("student_id")
-    
-    # Génération des codes à 6 chiffres
-    def generate_6_digits():
-        return str(random.randint(100000, 999999))
+    now        = _now_iso()
 
-    tickets_to_insert = []
-    now = datetime.datetime.utcnow().isoformat()
-    
-    for _ in range(quantity):
-        tickets_to_insert.append({
-            "student_id": student_id,
-            "ticket_code": generate_6_digits(),
-            "created_at": now
-        })
+    try:
+        existing_codes: set = set()
+        tickets_to_insert = [
+            {
+                "student_id":  student_id,
+                "payment_id":  request_id,
+                "ticket_code": _generate_unique_ticket_code(existing_codes),
+                "created_at":  now,
+            }
+            for _ in range(quantity)
+        ]
+    except RuntimeError as e:
+        return _bad(str(e), 500)
 
-    # Insérer les tickets en base
-    # Note: On assume que la table 'tickets' existe ou sera créée. 
-    # Son ID sera généré par défaut par Supabase (UUID ou SERIAL).
     tickets_insert = supabase.table("tickets").insert(tickets_to_insert).execute()
 
     if not tickets_insert.data:
-        # En production, on devrait peut-être annuler (rollback) l'approbation,
-        # mais Supabase via le client simple ne gère pas les transactions complexes aussi facilement.
         return _bad("Paiement approuvé mais erreur lors de la génération des tickets.", 500)
 
     return _ok(
-        f"Paiement approuvé et {quantity} ticket(s) généré(s).", 
-        data={"payment_id": request_id, "generated_tickets": len(tickets_insert.data)}
+        f"Paiement approuvé et {quantity} ticket(s) généré(s).",
+        data={
+            "payment_id":        request_id,
+            "generated_tickets": len(tickets_insert.data),
+        },
     )
 
+
 # ══════════════════════════════════════════════════════════════
-#  ROUTE  GET /tickets
+#  ROUTE  POST /tickets
 # ══════════════════════════════════════════════════════════════
 
 @payment_bp.route("/tickets", methods=["POST"])
 def get_user_tickets():
     """
     Récupère la liste des tickets d'un étudiant.
-    Utilise POST pour passer l'ID chiffré dans le corps, 
+    Utilise POST pour passer l'ID chiffré dans le corps,
     comme pour la requête de paiement, afin de garder la même politique de sécurité.
     """
     body = request.get_json(silent=True)
@@ -171,11 +221,10 @@ def get_user_tickets():
         return _bad("Corps JSON manquant ou invalide.")
 
     student_id = decrypt_aes(body.get("student_id", ""))
-    
+
     if not student_id:
         return _bad("ID étudiant introuvable ou déchiffrement échoué.", 401)
 
-    # Récupérer les tickets valides de cet étudiant
     tickets_result = (
         supabase
         .table("tickets")
