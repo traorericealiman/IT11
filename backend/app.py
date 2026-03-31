@@ -3,9 +3,9 @@ from flask import Flask
 from flask_cors import CORS
 import os
 
-from .routes.inscription import register_bp
-from .routes.connexion   import login_bp
-from .routes.paiement    import payment_bp
+from routes.inscription import register_bp
+from routes.connexion   import login_bp
+from routes.paiement    import payment_bp
 
 app = Flask(__name__)
 CORS(app)
