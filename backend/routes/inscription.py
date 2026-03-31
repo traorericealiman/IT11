@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify
 from supabase import create_client, Client
 import bcrypt
 import os
-from ..utils.crypto import decrypt_aes
+from utils.crypto import decrypt_aes
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
