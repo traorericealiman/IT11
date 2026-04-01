@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import TicketCard from '../components/TicketCard';
 import { getFirstName, getLastName, isLoggedIn } from '../api/session';
 import { getUserTickets } from '../api/tickets';
 import Navbar from '../components/Navbar';
@@ -14,29 +13,26 @@ interface Ticket {
 }
 
 export default function TicketsPage() {
-  console.log('🔄 TicketsPage render');  // ← ici
-
   const navigate = useNavigate();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [studentName] = useState(
-    `${getFirstName() || ''} ${getLastName() || ''}`.trim()
-  );
+  const hasFetched = useRef(false);
+
+  const studentName = `${getFirstName() || ''} ${getLastName() || ''}`.trim();
 
   useEffect(() => {
-    console.log('⚡ useEffect déclenché');  // ← et ici
-    
+    if (hasFetched.current) return;
+    hasFetched.current = true;
+
     if (!isLoggedIn()) {
       navigate('/', { replace: true });
       return;
     }
 
     async function loadTickets() {
-      console.log('📡 appel API');  // ← et ici
       try {
         const data = await getUserTickets();
-        console.log('✅ data reçue', data);  // ← et ici
         setTickets(data);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Une erreur est survenue.');
@@ -71,20 +67,42 @@ export default function TicketsPage() {
               Vous n'avez pas encore de billet validé.
             </p>
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/randonnée')}
               className="mt-6 px-6 py-3 bg-[#2e7d32] text-white rounded text-sm uppercase tracking-wider font-semibold hover:bg-[#1b5e20] transition-colors"
             >
               Acheter un ticket
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-12">
+          <div className="grid grid-cols-1 gap-4">
             {tickets.map((ticket) => (
-              <TicketCard
+              <div
                 key={ticket.id}
-                ticketCode={ticket.ticket_code}
-                holderName={studentName}
-              />
+                className="bg-white border border-[#dde8dd] rounded-lg p-6 flex items-center justify-between hover:shadow-md transition-shadow"
+              >
+                {/* Infos ticket */}
+                <div className="flex items-center gap-6">
+                  <div className="w-12 h-12 bg-[#f5f8f5] rounded-full flex items-center justify-center text-2xl">
+                    🎫
+                  </div>
+                  <div>
+                    <p className="font-semibold text-[#080f1e] text-lg">
+                      {studentName}
+                    </p>
+                    <p className="text-[#8a92a6] text-sm font-mono mt-1">
+                      N° {ticket.ticket_code.padStart(7, '0')}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Bouton voir */}
+                <button
+                  onClick={() => navigate(`/mes-billets/${ticket.ticket_code}`)}
+                  className="px-5 py-2.5 bg-[#2e7d32] text-white rounded text-sm uppercase tracking-wider font-semibold hover:bg-[#1b5e20] transition-colors whitespace-nowrap"
+                >
+                  Voir mon billet →
+                </button>
+              </div>
             ))}
           </div>
         )}
