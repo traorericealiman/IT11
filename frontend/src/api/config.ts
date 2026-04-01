@@ -1,5 +1,6 @@
 // src/config.ts
-const BASE_URL = 'https://it11-ajlp.onrender.com';
+//const BASE_URL = 'https://it11-ajlp.onrender.com';
+const BASE_URL = 'http://localhost:5000';
 
 export const API: Record<string, any> = {
   baseUrl:        BASE_URL,

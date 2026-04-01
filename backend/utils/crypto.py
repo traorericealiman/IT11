@@ -1,14 +1,13 @@
 # backend/utils/crypto.py
 """
-Utilitaire de déchiffrement AES-CBC compatible avec CryptoJS.AES.encrypt(text, passphrase).
-
+Utilitaire de chiffrement/déchiffrement AES-CBC compatible avec CryptoJS.AES.encrypt(text, passphrase).
 La clé et l'IV sont dérivés selon la méthode OpenSSL (MD5 EVP_BytesToKey),
 avec un en-tête 'Salted__' suivi du salt sur 8 octets.
 """
-
 import base64
 import hashlib
 import os
+import secrets
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.padding import PKCS7
 
@@ -22,6 +21,22 @@ def _derive_key_iv(passphrase: bytes, salt: bytes) -> tuple[bytes, bytes]:
         d_i = hashlib.md5(d_i + passphrase + salt).digest()
         d += d_i
     return d[:32], d[32:48]
+
+
+def encrypt_aes(plaintext: str) -> str:
+    """
+    Chiffre une valeur en AES-CBC compatible avec CryptoJS.AES.decrypt(text, passphrase).
+    Retourne la valeur chiffrée en base64.
+    """
+    salt      = secrets.token_bytes(8)
+    key, iv   = _derive_key_iv(AES_SECRET_KEY.encode("utf-8"), salt)
+    padder    = PKCS7(128).padder()
+    padded    = padder.update(plaintext.encode("utf-8")) + padder.finalize()
+    cipher    = Cipher(algorithms.AES(key), modes.CBC(iv))
+    encryptor = cipher.encryptor()
+    encrypted = encryptor.update(padded) + encryptor.finalize()
+    raw       = b"Salted__" + salt + encrypted
+    return base64.b64encode(raw).decode("utf-8")
 
 
 def decrypt_aes(ciphertext_b64: str) -> str | None:

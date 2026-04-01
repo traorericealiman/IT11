@@ -162,8 +162,7 @@ def approve_payment(request_id: str):
         supabase
         .table("payment_requests")
         .update({
-            "status":     "approved",
-            "updated_at": _now_iso(),
+            "status":     "approved"
         })
         .eq("id", request_id)
         .execute()
