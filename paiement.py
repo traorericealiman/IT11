@@ -112,10 +112,6 @@ def request_payment():
     )
 
 
-# ══════════════════════════════════════════════════════════════
-#  ROUTE  POST /payment/approve/<request_id>
-# ══════════════════════════════════════════════════════════════
-
 @payment_bp.route("/payment/approve/<request_id>", methods=["POST"])
 def approve_payment(request_id: str):
     update_result = (
