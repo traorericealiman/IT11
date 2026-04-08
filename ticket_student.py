@@ -7,13 +7,14 @@ from supabase import create_client, Client
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 JWT_SECRET   = os.environ["JWT_SECRET"]
+BUCKET = os.environ.get("BUCKET", "Tickets")
+
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 ticket_student_bp = Blueprint("ticket_student", __name__)
 
 SUPPORT_PHONE = "0707406906"
-TICKET_BUCKET = "tickets"  # ← nom de ton bucket Supabase Storage
 
 
 def _bad(message: str, status: int = 400):
@@ -42,13 +43,13 @@ def _require_student(req) -> dict | None:
 
 
 def _signed_url(file_path: str, expires_in: int = 300) -> str | None:
-    """Génère une URL signée valable `expires_in` secondes."""
     try:
-        res = supabase.storage.from_(TICKET_BUCKET).create_signed_url(
-            file_path, expires_in
-        )
+        # file_path = "ticket_000007.jpg" (path relatif, pas d'URL complète)
+        res = supabase.storage.from_(BUCKET).create_signed_url(file_path, expires_in)
+        print(f"[signed_url] path={file_path!r} → {res}")
         return res.get("signedURL") or res.get("signed_url")
-    except Exception:
+    except Exception as e:
+        print(f"[signed_url] ERREUR: {e}")
         return None
 
 
@@ -119,7 +120,7 @@ def get_ticket_status():
         tickets.append({
             "id":          t["id"],
             "ticket_code": t["ticket_code"],
-            "ticket_url":  signed or t["ticket_url"],  # fallback si erreur
+            "ticket_url":  signed or t["ticket_url"],  
             "created_at":  t["created_at"],
         })
 
