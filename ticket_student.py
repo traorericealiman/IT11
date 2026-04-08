@@ -1,4 +1,6 @@
 # backend/ticket_student.py
+import io
+
 from flask import Blueprint, request, jsonify
 import os
 import jwt
@@ -158,6 +160,9 @@ def get_ticket_status():
 # ──────────────────────────────────────────────────────────────
 @ticket_student_bp.route("/student/ticket/<string:ticket_id>/download", methods=["GET"])
 def download_ticket(ticket_id: str):
+    from flask import send_file
+    import requests as req
+
     student = _require_student(request)
     if not student:
         return _bad("Accès refusé. Veuillez vous connecter.", 403)
@@ -165,11 +170,10 @@ def download_ticket(ticket_id: str):
     student_id = student["sub"]
 
     result = (
-        supabase
-        .table("tickets")
+        supabase.table("tickets")
         .select("id, ticket_code, ticket_url")
         .eq("id", ticket_id)
-        .eq("student_id", student_id)   # sécurité : le ticket doit appartenir à l'étudiant
+        .eq("student_id", student_id)
         .limit(1)
         .execute()
     )
@@ -178,9 +182,21 @@ def download_ticket(ticket_id: str):
         return _bad("Billet introuvable.", 404)
 
     ticket = result.data[0]
-    signed = _signed_url(ticket["ticket_url"], expires_in=60)  # 60s, usage unique
+    signed = _signed_url(ticket["ticket_url"], expires_in=60)
 
     if not signed:
         return _bad("Impossible de générer le lien de téléchargement.", 500)
 
-    return _ok("URL de téléchargement générée.", data={"download_url": signed})
+    # Télécharge le fichier depuis Supabase côté serveur
+    file_resp = req.get(signed)
+    if file_resp.status_code != 200:
+        return _bad("Erreur lors du téléchargement du fichier.", 500)
+
+    # Envoie le fichier directement au client
+    ticket_code = ticket["ticket_code"]
+    return send_file(
+        io.BytesIO(file_resp.content),
+        mimetype="image/jpeg",
+        as_attachment=True,
+        download_name=f"ticket_{ticket_code}.jpg",
+    )
