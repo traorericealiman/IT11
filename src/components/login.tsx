@@ -310,9 +310,6 @@ export default function AuthPage() {
             <p className="text-white/50 text-base font-light max-w-xs leading-relaxed">
               Connectez-vous pour accéder à vos ressources, événements et au réseau exclusif de la P11.
             </p>
-            <div className="mt-14 flex items-center gap-3 bg-white/5 backdrop-blur-xl px-5 py-3 rounded-2xl border border-white/10">
-              <div className="text-white/50 text-[10px] uppercase tracking-widest font-medium">Édition Spéciale · 2024 – 2026</div>
-            </div>
           </div>
         </div>
 
