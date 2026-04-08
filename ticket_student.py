@@ -42,12 +42,14 @@ def _require_student(req) -> dict | None:
         return None
 
 
+# APRÈS
 def _signed_url(file_path: str, expires_in: int = 300) -> str | None:
     try:
-        # file_path = "ticket_000007.jpg" (path relatif, pas d'URL complète)
         res = supabase.storage.from_(BUCKET).create_signed_url(file_path, expires_in)
-        print(f"[signed_url] path={file_path!r} → {res}")
-        return res.get("signedURL") or res.get("signed_url")
+        print(f"[signed_url] résultat brut → {res}")
+        if isinstance(res, dict):
+            return res.get("signedURL") or res.get("signedUrl") or res.get("signed_url")
+        return getattr(res, "signed_url", None) or getattr(res, "signedURL", None)
     except Exception as e:
         print(f"[signed_url] ERREUR: {e}")
         return None
