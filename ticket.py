@@ -107,7 +107,7 @@ def uploader_supabase(image_bytes: bytes, filename: str):
         return None, f"Upload Supabase échoué : {resp.text}", 500
 
     # ← On stocke le PATH RELATIF, pas l'URL publique (bucket privé)
-    file_path = filename  # ex: "ticket_000007.jpg"
+    file_path = filename
     return file_path, None, None
 
 

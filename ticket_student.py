@@ -47,9 +47,20 @@ def _signed_url(file_path: str, expires_in: int = 300) -> str | None:
     try:
         res = supabase.storage.from_(BUCKET).create_signed_url(file_path, expires_in)
         print(f"[signed_url] résultat brut → {res}")
+        
+        # Le SDK Python retourne un dict avec la clé 'signedURL'
         if isinstance(res, dict):
-            return res.get("signedURL") or res.get("signedUrl") or res.get("signed_url")
-        return getattr(res, "signed_url", None) or getattr(res, "signedURL", None)
+            url = res.get("signedURL") or res.get("signedUrl") or res.get("signed_url")
+            if url:
+                return url
+        
+        # Parfois c'est un objet
+        url = getattr(res, "signed_url", None) or getattr(res, "signedURL", None)
+        if url:
+            return url
+            
+        print(f"[signed_url] Clés disponibles: {res}")
+        return None
     except Exception as e:
         print(f"[signed_url] ERREUR: {e}")
         return None
