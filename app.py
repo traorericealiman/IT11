@@ -9,7 +9,7 @@ from paiement import payment_bp
 from connexion_admin import login_admin_bp
 from liste_paiement import payment_admin_bp
 from ticket import validate_payment_bp
-
+from ticket_student import ticket_student_bp
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
@@ -23,6 +23,8 @@ app.register_blueprint(payment_bp)
 app.register_blueprint(login_admin_bp)
 app.register_blueprint(payment_admin_bp)
 app.register_blueprint(validate_payment_bp)
+app.register_blueprint(ticket_student_bp)
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
