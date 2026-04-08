@@ -1,184 +1,194 @@
+# backend/validate_payment.py
 import io
 import os
 import urllib.request
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from flask import Blueprint, request, jsonify
+from supabase import create_client, Client
 from PIL import Image, ImageDraw, ImageFont
 import barcode
 from barcode.writer import ImageWriter
-import httpx
+import requests
 
 # --- CONFIGURATION ---
-SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_URL              = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY              = os.environ.get("SUPABASE_KEY")
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-IMAGE_URL = os.environ["IMAGE_URL"]
-BUCKET = os.environ.get("BUCKET", "Tickets")
+IMAGE_URL                 = os.environ["IMAGE_URL"]
+BUCKET                    = os.environ.get("BUCKET", "Tickets")
 
-HEADERS = {
-    "apikey": SUPABASE_SERVICE_ROLE_KEY,
-    "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-    "Content-Type": "application/json",
-    "Prefer": "return=representation",
-}
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-# --- SCHEMA ---
-class ValidatePaymentRequest(BaseModel):
-    student_id: str
-    payment_id: str
+validate_payment_bp = Blueprint("validate_payment", __name__)
 
 
 # --- HELPERS ---
 
-async def verifier_paiement(payment_id: str, student_id: str):
-    """Vérifie que le paiement existe, appartient à l'étudiant, et est en attente."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"{SUPABASE_URL}/rest/v1/payment_requests"
-            f"?id=eq.{payment_id}&student_id=eq.{student_id}&select=id,status",
-            headers=HEADERS,
-        )
-        data = resp.json()
-        if not data:
-            raise HTTPException(status_code=404, detail="Paiement introuvable ou n'appartient pas à cet étudiant")
-        if data[0]["status"] == "approved":
-            raise HTTPException(status_code=400, detail="Paiement déjà validé, ticket déjà généré")
+def _bad(message: str, status: int = 400):
+    return jsonify({"error": message}), status
 
 
-async def get_next_ticket_number() -> str:
+def _ok(message: str, data=None, status: int = 200):
+    payload = {"message": message}
+    if data is not None:
+        payload["data"] = data
+    return jsonify(payload), status
+
+
+def verifier_paiement(payment_id: str, student_id: str):
+    """Vérifie que le paiement existe, appartient à l'étudiant, et n'est pas déjà approuvé."""
+    result = (
+        supabase
+        .table("payment_requests")
+        .select("id, status")
+        .eq("id", payment_id)
+        .eq("student_id", student_id)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        return None, "Paiement introuvable ou n'appartient pas à cet étudiant.", 404
+    if result.data[0]["status"] == "approved":
+        return None, "Paiement déjà validé, ticket déjà généré.", 400
+    return result.data[0], None, None
+
+
+def get_next_ticket_number() -> tuple:
     """Récupère le prochain numéro de ticket via la séquence Supabase."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{SUPABASE_URL}/rest/v1/rpc/next_ticket_number",
-            headers=HEADERS,
-        )
-        if resp.status_code != 200:
-            raise HTTPException(status_code=500, detail=f"Séquence ticket échouée : {resp.text}")
-        numero = resp.json()
-    return str(numero).zfill(6)
+    resp = supabase.rpc("next_ticket_number").execute()
+    if not resp.data:
+        return None, "Séquence ticket échouée.", 500
+    return str(resp.data).zfill(6), None, None
 
 
 def generer_image_ticket(ticket_code: str) -> bytes:
     """Génère l'image du ticket avec le code-barres et retourne les bytes JPEG."""
-
-    # Télécharger l'image de base
     with urllib.request.urlopen(IMAGE_URL) as response:
         img_data = response.read()
     img = Image.open(io.BytesIO(img_data)).convert("RGBA")
 
-    # Générer le code-barres Code128
-    code_class = barcode.get_barcode_class('code128')
-    writer_options = {"write_text": False, "module_height": 18.0, "quiet_zone": 1.0}
+    # Code-barres Code128 vertical
+    code_class  = barcode.get_barcode_class("code128")
+    writer_opts = {"write_text": False, "module_height": 18.0, "quiet_zone": 1.0}
     barcode_obj = code_class(ticket_code, writer=ImageWriter())
-    barcode_img = barcode_obj.render(writer_options)
-
-    barcode_img = barcode_img.rotate(90, expand=True)
-    barcode_img = barcode_img.resize((160, 480))
-    img.paste(barcode_img, (30, 90), barcode_img if barcode_img.mode == 'RGBA' else None)
+    barcode_img = barcode_obj.render(writer_opts)
+    barcode_img = barcode_img.rotate(90, expand=True).resize((160, 480))
+    img.paste(barcode_img, (30, 90), barcode_img if barcode_img.mode == "RGBA" else None)
 
     # Numéro en texte vertical
-    txt_layer = Image.new('RGBA', (400, 100), (255, 255, 255, 0))
-    draw_txt = ImageDraw.Draw(txt_layer)
+    txt_layer = Image.new("RGBA", (400, 100), (255, 255, 255, 0))
+    draw_txt  = ImageDraw.Draw(txt_layer)
     try:
         font = ImageFont.truetype("arialbd.ttf", 65)
-    except:
+    except Exception:
         font = ImageFont.load_default()
     draw_txt.text((0, 0), ticket_code, fill="black", font=font)
     txt_layer = txt_layer.rotate(90, expand=True)
     img.paste(txt_layer, (200, -50), txt_layer)
 
-    # Export en mémoire
     buffer = io.BytesIO()
     img.convert("RGB").save(buffer, "JPEG", quality=95)
     buffer.seek(0)
     return buffer.read()
 
 
-async def uploader_supabase(image_bytes: bytes, filename: str) -> str:
+def uploader_supabase(image_bytes: bytes, filename: str) -> tuple:
     """Upload l'image dans Supabase Storage et retourne le lien public."""
     upload_url = f"{SUPABASE_URL}/storage/v1/object/{BUCKET}/{filename}"
-
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            upload_url,
-            content=image_bytes,
-            headers={
-                "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-                "Content-Type": "image/jpeg",
-                "x-upsert": "true",
-            }
-        )
-        if resp.status_code not in (200, 201):
-            raise HTTPException(status_code=500, detail=f"Upload Supabase échoué : {resp.text}")
-
-    return f"{SUPABASE_URL}/storage/v1/object/public/{BUCKET}/{filename}"
+    resp = requests.post(
+        upload_url,
+        data=image_bytes,
+        headers={
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+            "Content-Type":  "image/jpeg",
+            "x-upsert":      "true",
+        },
+    )
+    if resp.status_code not in (200, 201):
+        return None, f"Upload Supabase échoué : {resp.text}", 500
+    public_url = f"{SUPABASE_URL}/storage/v1/object/public/{BUCKET}/{filename}"
+    return public_url, None, None
 
 
-async def sauvegarder_ticket(student_id: str, ticket_code: str, ticket_url: str):
+def sauvegarder_ticket(student_id: str, ticket_code: str, ticket_url: str) -> tuple:
     """Insère le ticket en base de données."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{SUPABASE_URL}/rest/v1/tickets",
-            headers=HEADERS,
-            json={
-                "student_id": student_id,
-                "ticket_code": ticket_code,
-                "ticket_url": ticket_url,
-            }
-        )
-        if resp.status_code not in (200, 201):
-            raise HTTPException(status_code=500, detail=f"Insertion ticket échouée : {resp.text}")
-        return resp.json()[0]
+    result = (
+        supabase
+        .table("tickets")
+        .insert({
+            "student_id":  student_id,
+            "ticket_code": ticket_code,
+            "ticket_url":  ticket_url,
+        })
+        .execute()
+    )
+    if not result.data:
+        return None, "Insertion ticket échouée.", 500
+    return result.data[0], None, None
 
 
-async def approuver_paiement(payment_id: str):
+def approuver_paiement(payment_id: str) -> tuple:
     """Passe le statut du paiement à 'approved'."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.patch(
-            f"{SUPABASE_URL}/rest/v1/payment_requests?id=eq.{payment_id}",
-            headers=HEADERS,
-            json={"status": "approved"}
-        )
-        if resp.status_code not in (200, 204):
-            raise HTTPException(status_code=500, detail=f"Approbation paiement échouée : {resp.text}")
+    result = (
+        supabase
+        .table("payment_requests")
+        .update({"status": "approved"})
+        .eq("id", payment_id)
+        .execute()
+    )
+    if not result.data:
+        return "Approbation paiement échouée.", 500
+    return None, None
 
 
-# --- ENDPOINT ---
+# --- ROUTE ---
 
-@app.post("/validate-payment")
-async def validate_payment(body: ValidatePaymentRequest):
-    # 0. Vérifier que le paiement est valide et en attente
-    await verifier_paiement(body.payment_id, body.student_id)
+@validate_payment_bp.route("/validate-payment", methods=["POST"])
+def validate_payment():
+    body = request.get_json(silent=True)
+    if not body:
+        return _bad("Corps JSON manquant ou invalide.")
+
+    student_id = body.get("student_id", "").strip()
+    payment_id = body.get("payment_id", "").strip()
+
+    if not student_id or not payment_id:
+        return _bad("student_id et payment_id sont requis.")
+
+    # 0. Vérifier le paiement
+    _, err, code = verifier_paiement(payment_id, student_id)
+    if err:
+        return _bad(err, code)
 
     # 1. Numéro unique depuis la séquence
-    ticket_code = await get_next_ticket_number()
+    ticket_code, err, code = get_next_ticket_number()
+    if err:
+        return _bad(err, code)
 
     # 2. Génération de l'image avec code-barres
     image_bytes = generer_image_ticket(ticket_code)
 
     # 3. Upload dans Supabase Storage
     filename = f"ticket_{ticket_code}.jpg"
-    ticket_url = await uploader_supabase(image_bytes, filename)
+    ticket_url, err, code = uploader_supabase(image_bytes, filename)
+    if err:
+        return _bad(err, code)
 
     # 4. Sauvegarde en base de données
-    ticket = await sauvegarder_ticket(body.student_id, ticket_code, ticket_url)
+    ticket, err, code = sauvegarder_ticket(student_id, ticket_code, ticket_url)
+    if err:
+        return _bad(err, code)
 
     # 5. Approbation du paiement
-    await approuver_paiement(body.payment_id)
+    err, code = approuver_paiement(payment_id)
+    if err:
+        return _bad(err, code)
 
-    return {
-        "success": True,
-        "ticket_code": ticket_code,
-        "ticket_url": ticket_url,
-        "ticket_id": ticket.get("id"),
-    }
+    return _ok(
+        "Ticket généré avec succès !",
+        data={
+            "ticket_code": ticket_code,
+            "ticket_url":  ticket_url,
+            "ticket_id":   ticket.get("id"),
+        },
+        status=201,
+    )
