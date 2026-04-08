@@ -72,9 +72,6 @@ def _generate_jwt(student: dict, is_admin: bool) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
-# ──────────────────────────────────────────────
-#  Route utilisateur normal  →  POST /auth/login
-# ──────────────────────────────────────────────
 @login_admin_bp.route("/auth/login", methods=["POST"])
 def login():
     body = request.get_json(silent=True)
@@ -105,7 +102,6 @@ def login():
 
     student = result.data[0]
 
-    # Bloquer les admins sur cette route
     if student["is_admin"]:
         return _bad("Accès refusé. Utilisez la route admin.", 403)
 
@@ -129,10 +125,6 @@ def login():
         status=200,
     )
 
-
-# ──────────────────────────────────────────────
-#  Route admin                →  POST /admin/login
-# ──────────────────────────────────────────────
 @login_admin_bp.route("/admin/login", methods=["POST"])
 def admin_login():
     body = request.get_json(silent=True)
@@ -163,7 +155,6 @@ def admin_login():
 
     student = result.data[0]
 
-    # Vérifier que le compte est bien admin
     if not student["is_admin"]:
         return _bad("Accès refusé. Compte non administrateur.", 403)
 

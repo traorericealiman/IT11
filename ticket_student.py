@@ -46,7 +46,6 @@ def _require_student(req) -> dict | None:
         return None
 
 
-# APRÈS
 def _signed_url(file_path: str, expires_in: int = 300) -> str | None:
     try:
         url = f"{SUPABASE_URL}/storage/v1/object/sign/{BUCKET}/{file_path}"
@@ -63,7 +62,6 @@ def _signed_url(file_path: str, expires_in: int = 300) -> str | None:
             data = resp.json()
             signed_path = data.get("signedURL") or data.get("signedUrl")
             if signed_path:
-                # signed_path est un path relatif, on construit l'URL complète
                 if signed_path.startswith("http"):
                     return signed_path
                 return f"{SUPABASE_URL}/storage/v1{signed_path}"
@@ -72,9 +70,6 @@ def _signed_url(file_path: str, expires_in: int = 300) -> str | None:
         print(f"[signed_url] ERREUR: {e}")
         return None
     
-# ──────────────────────────────────────────────────────────────
-#  GET /student/ticket-status
-# ──────────────────────────────────────────────────────────────
 @ticket_student_bp.route("/student/ticket-status", methods=["GET"])
 def get_ticket_status():
     student = _require_student(request)
@@ -83,7 +78,6 @@ def get_ticket_status():
 
     student_id = student["sub"]
 
-    # 1. Toutes les demandes de paiement de l'étudiant
     payment_result = (
         supabase
         .table("payment_requests")
@@ -93,7 +87,6 @@ def get_ticket_status():
         .execute()
     )
 
-    # ✅ FIX : si aucune demande, retourner "none" immédiatement
     if not payment_result.data:
         return _ok("Aucune demande.", data={"status": "none"})
 
@@ -101,12 +94,10 @@ def get_ticket_status():
     latest = payments[0]
     latest_status = latest["status"]
 
-    # Comptes utiles
     total_expected = sum(p["quantity"] for p in payments if p["status"] == "approved")
     pending_count  = sum(1 for p in payments if p["status"] == "pending")
     rejected_count = sum(1 for p in payments if p["status"] == "rejected")
 
-    # 2. Aucune demande approuvée → pending ou rejected
     if total_expected == 0:
         if latest_status == "pending":
             return _ok(
@@ -119,7 +110,6 @@ def get_ticket_status():
                 data={"status": "rejected", "support_phone": SUPPORT_PHONE}
             )
 
-    # 3. Au moins une demande approuvée → récupérer les tickets
     tickets_result = (
         supabase
         .table("tickets")
@@ -141,7 +131,6 @@ def get_ticket_status():
             "created_at":  t["created_at"],
         })
 
-    # ✅ FIX : on inclut TOUJOURS pending_count et rejected_count
     return _ok(
         f"{len(tickets_ready)} billet(s) disponible(s) sur {total_expected} attendu(s).",
         data={
@@ -149,15 +138,11 @@ def get_ticket_status():
             "tickets":        tickets,
             "tickets_ready":  len(tickets_ready),
             "tickets_total":  total_expected,
-            "pending_count":  pending_count,   # ✅ était manquant
-            "rejected_count": rejected_count,  # ✅ était manquant
+            "pending_count":  pending_count,   
+            "rejected_count": rejected_count,
         }
     )
 
-# ──────────────────────────────────────────────────────────────
-#  GET /student/ticket/<ticket_id>/download
-#  Régénère une URL signée fraîche à la demande
-# ──────────────────────────────────────────────────────────────
 @ticket_student_bp.route("/student/ticket/<string:ticket_id>/download", methods=["GET"])
 def download_ticket(ticket_id: str):
     from flask import send_file

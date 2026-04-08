@@ -37,7 +37,6 @@ def _require_admin(req):
     token = auth.split(" ", 1)[1]
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        # Remplace "role" == "admin" par "is_admin" == True
         if not payload.get("is_admin"):
             return None
         return payload
@@ -106,7 +105,6 @@ def uploader_supabase(image_bytes: bytes, filename: str):
     if resp.status_code not in (200, 201):
         return None, f"Upload Supabase échoué : {resp.text}", 500
 
-    # ← On stocke le PATH RELATIF, pas l'URL publique (bucket privé)
     file_path = filename
     return file_path, None, None
 
@@ -118,7 +116,7 @@ def sauvegarder_ticket(student_id, ticket_code, ticket_path, payment_id):
         .insert({
             "student_id":         student_id,
             "ticket_code":        ticket_code,
-            "ticket_url":         ticket_path,   # path relatif
+            "ticket_url":         ticket_path,   
             "payment_id": payment_id,    
         })
         .execute()
@@ -159,7 +157,6 @@ def validate_payment():
     if not student_id or not payment_id:
         return _bad("student_id et payment_id sont requis.")
 
-    # 0. Vérifier que le paiement existe et n'est pas déjà approuvé
     result = (
         supabase.table("payment_requests")
         .select("id, status, quantity")
@@ -175,7 +172,6 @@ def validate_payment():
 
     quantity = result.data[0].get("quantity", 1)
 
-    # 1. Générer N tickets selon la quantity
     generated = []
     for _ in range(quantity):
         ticket_code, err, code = get_next_ticket_number()
@@ -198,7 +194,6 @@ def validate_payment():
             "ticket_id":   ticket.get("id"),
         })
 
-    # 2. Approuver le paiement
     err, code = approuver_paiement(payment_id)
     if err:
         return _bad(err, code)

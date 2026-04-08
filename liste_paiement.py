@@ -38,18 +38,12 @@ def _require_admin(req) -> dict | None:
     except jwt.PyJWTError:
         return None
 
-
-# ──────────────────────────────────────────────────────────────
-#  GET /admin/payment-requests
-#  Retourne toutes les demandes avec nom/prénom du student
-# ──────────────────────────────────────────────────────────────
 @payment_admin_bp.route("/admin/payment-requests", methods=["GET"])
 def get_payment_requests():
     admin = _require_admin(request)
     if not admin:
         return _bad("Accès refusé. Token admin invalide ou manquant.", 403)
 
-    # Filtre optionnel par status  (?status=pending | approved | rejected)
     status_filter = request.args.get("status")
 
     query = (
@@ -70,7 +64,6 @@ def get_payment_requests():
     if result.data is None:
         return _bad("Erreur lors de la récupération des données.", 500)
 
-    # Aplatir la réponse pour le frontend
     rows = []
     for r in result.data:
         student = r.get("students") or {}
@@ -90,10 +83,7 @@ def get_payment_requests():
     return _ok("Liste des demandes de paiement.", data=rows)
 
 
-# ──────────────────────────────────────────────────────────────
-#  PATCH /admin/payment-requests/<id>/approve
-#  Passer le status à 'approved'
-# ──────────────────────────────────────────────────────────────
+
 @payment_admin_bp.route("/admin/payment-requests/<string:request_id>/approve", methods=["PATCH"])
 def approve_payment_request(request_id: str):
     admin = _require_admin(request)
@@ -114,17 +104,12 @@ def approve_payment_request(request_id: str):
     return _ok("Demande approuvée avec succès.", data=result.data[0])
 
 
-# ──────────────────────────────────────────────────────────────
-#  PATCH /admin/payment-requests/<id>/reject
-#  Passer le status à 'rejected'
-# ──────────────────────────────────────────────────────────────
 @payment_admin_bp.route("/admin/payment-requests/<string:request_id>/reject", methods=["PATCH"])
 def reject_payment_request(request_id: str):
     admin = _require_admin(request)
     if not admin:
         return _bad("Accès refusé. Token admin invalide ou manquant.", 403)
 
-    # Vérifier que la demande est bien en attente
     check = (
         supabase
         .table("payment_requests")
