@@ -45,9 +45,9 @@ def _require_student(req) -> dict | None:
 # APRÈS
 def _signed_url(file_path: str, expires_in: int = 300) -> str | None:
     try:
+        print(f"[signed_url] path envoyé à Supabase → '{file_path}'")  # ← ajoute ça
         res = supabase.storage.from_(BUCKET).create_signed_url(file_path, expires_in)
         print(f"[signed_url] résultat brut → {res}")
-        
         # Le SDK Python retourne un dict avec la clé 'signedURL'
         if isinstance(res, dict):
             url = res.get("signedURL") or res.get("signedUrl") or res.get("signed_url")
