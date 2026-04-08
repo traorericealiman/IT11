@@ -31,14 +31,14 @@ def _ok(message, data=None, status=200):
     return jsonify(payload), status
 
 def _require_admin(req):
-    """Vérifie le token JWT et que le rôle est admin."""
     auth = req.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         return None
     token = auth.split(" ", 1)[1]
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        if payload.get("role") != "admin":
+        # Remplace "role" == "admin" par "is_admin" == True
+        if not payload.get("is_admin"):
             return None
         return payload
     except jwt.PyJWTError:
