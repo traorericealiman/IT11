@@ -2,12 +2,14 @@
 from flask import Blueprint, request, jsonify
 import os
 import jwt
+import requests
 from supabase import create_client, Client
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 JWT_SECRET   = os.environ["JWT_SECRET"]
 BUCKET = os.environ.get("BUCKET", "Tickets")
+SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -45,27 +47,29 @@ def _require_student(req) -> dict | None:
 # APRÈS
 def _signed_url(file_path: str, expires_in: int = 300) -> str | None:
     try:
-        print(f"[signed_url] path envoyé à Supabase → '{file_path}'")  # ← ajoute ça
-        res = supabase.storage.from_(BUCKET).create_signed_url(file_path, expires_in)
-        print(f"[signed_url] résultat brut → {res}")
-        # Le SDK Python retourne un dict avec la clé 'signedURL'
-        if isinstance(res, dict):
-            url = res.get("signedURL") or res.get("signedUrl") or res.get("signed_url")
-            if url:
-                return url
-        
-        # Parfois c'est un objet
-        url = getattr(res, "signed_url", None) or getattr(res, "signedURL", None)
-        if url:
-            return url
-            
-        print(f"[signed_url] Clés disponibles: {res}")
+        url = f"{SUPABASE_URL}/storage/v1/object/sign/{BUCKET}/{file_path}"
+        resp = requests.post(
+            url,
+            json={"expiresIn": expires_in},
+            headers={
+                "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+                "Content-Type": "application/json",
+            },
+        )
+        print(f"[signed_url] status={resp.status_code} réponse={resp.text}")
+        if resp.status_code == 200:
+            data = resp.json()
+            signed_path = data.get("signedURL") or data.get("signedUrl")
+            if signed_path:
+                # signed_path est un path relatif, on construit l'URL complète
+                if signed_path.startswith("http"):
+                    return signed_path
+                return f"{SUPABASE_URL}/storage/v1{signed_path}"
         return None
     except Exception as e:
         print(f"[signed_url] ERREUR: {e}")
         return None
-
-
+    
 # ──────────────────────────────────────────────────────────────
 #  GET /student/ticket-status
 # ──────────────────────────────────────────────────────────────
