@@ -416,14 +416,6 @@ export default function RecupererMonTicket() {
             </div>
           )}
         </div>
-
-        <p style={{
-          marginTop: '80px', fontFamily: "'DM Mono', monospace",
-          fontSize: '10px', color: '#b8c8b8', letterSpacing: '0.2em',
-          textTransform: 'uppercase', textAlign: 'center',
-        }}>
-          Support · 0707 40 69 06
-        </p>
       </section>
     </>
   );
