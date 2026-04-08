@@ -49,7 +49,7 @@ def get_payment_requests():
     if not admin:
         return _bad("Accès refusé. Token admin invalide ou manquant.", 403)
 
-    # Filtre optionnel par status  (?status=pending ou ?status=approved)
+    # Filtre optionnel par status  (?status=pending | approved | rejected)
     status_filter = request.args.get("status")
 
     query = (
@@ -62,7 +62,7 @@ def get_payment_requests():
         .order("created_at", desc=True)
     )
 
-    if status_filter in ("pending", "approved"):
+    if status_filter in ("pending", "approved", "rejected"):
         query = query.eq("status", status_filter)
 
     result = query.execute()
@@ -112,3 +112,43 @@ def approve_payment_request(request_id: str):
         return _bad("Demande introuvable.", 404)
 
     return _ok("Demande approuvée avec succès.", data=result.data[0])
+
+
+# ──────────────────────────────────────────────────────────────
+#  PATCH /admin/payment-requests/<id>/reject
+#  Passer le status à 'rejected'
+# ──────────────────────────────────────────────────────────────
+@payment_admin_bp.route("/admin/payment-requests/<string:request_id>/reject", methods=["PATCH"])
+def reject_payment_request(request_id: str):
+    admin = _require_admin(request)
+    if not admin:
+        return _bad("Accès refusé. Token admin invalide ou manquant.", 403)
+
+    # Vérifier que la demande est bien en attente
+    check = (
+        supabase
+        .table("payment_requests")
+        .select("id, status")
+        .eq("id", request_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not check.data:
+        return _bad("Demande introuvable.", 404)
+
+    if check.data[0]["status"] != "pending":
+        return _bad("Seules les demandes en attente peuvent être refusées.", 400)
+
+    result = (
+        supabase
+        .table("payment_requests")
+        .update({"status": "rejected"})
+        .eq("id", request_id)
+        .execute()
+    )
+
+    if not result.data:
+        return _bad("Erreur lors du refus de la demande.", 500)
+
+    return _ok("Demande refusée.", data=result.data[0])
