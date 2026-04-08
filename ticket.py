@@ -119,7 +119,7 @@ def sauvegarder_ticket(student_id, ticket_code, ticket_path, payment_id):
             "student_id":         student_id,
             "ticket_code":        ticket_code,
             "ticket_url":         ticket_path,   # path relatif
-            "payment_request_id": payment_id,    # ← lien vers la demande
+            "payment_id": payment_id,    # ← lien vers la demande
         })
         .execute()
     )
