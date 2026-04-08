@@ -27,14 +27,14 @@ def _ok(message: str, data=None, status: int = 200):
 
 
 def _require_student(req) -> dict | None:
-    """Vérifie le JWT et retourne le payload (doit contenir student_id)."""
+    """Vérifie le JWT et retourne le payload. L'id étudiant est dans 'sub'."""
     auth_header = req.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         return None
     token = auth_header.split(" ", 1)[1]
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        if not payload.get("student_id"):
+        if not payload.get("sub"):
             return None
         return payload
     except jwt.PyJWTError:
@@ -43,8 +43,6 @@ def _require_student(req) -> dict | None:
 
 # ──────────────────────────────────────────────────────────────
 #  GET /student/ticket-status
-#  Vérifie l'état de la demande de paiement et renvoie
-#  le(s) ticket(s) si la demande est approuvée.
 # ──────────────────────────────────────────────────────────────
 @ticket_student_bp.route("/student/ticket-status", methods=["GET"])
 def get_ticket_status():
@@ -52,9 +50,9 @@ def get_ticket_status():
     if not student:
         return _bad("Accès refusé. Veuillez vous connecter.", 403)
 
-    student_id = student["student_id"]
+    student_id = student["sub"]
 
-    # 1. Chercher la dernière demande de paiement de l'étudiant
+    # 1. Dernière demande de paiement de l'étudiant
     payment_result = (
         supabase
         .table("payment_requests")
@@ -92,7 +90,7 @@ def get_ticket_status():
             data={"status": "rejected", "support_phone": SUPPORT_PHONE}
         )
 
-    # 4. Demande approuvée → récupérer le(s) ticket(s)
+    # 4. Demande approuvée → récupérer les tickets
     if status == "approved":
         tickets_result = (
             supabase
@@ -104,7 +102,6 @@ def get_ticket_status():
         )
 
         if not tickets_result.data:
-            # Cas rare : approuvé mais pas encore de ticket généré
             return _ok(
                 "Votre paiement a été approuvé. "
                 "Votre billet est en cours de génération, réessayez dans quelques instants.",
@@ -126,5 +123,4 @@ def get_ticket_status():
             data={"status": "approved", "tickets": tickets}
         )
 
-    # Statut inconnu
     return _bad("Statut de demande inconnu.", 500)
