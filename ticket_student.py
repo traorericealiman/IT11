@@ -94,8 +94,18 @@ def get_ticket_status():
     )
 
     if not payment_result.data:
-        return _ok("Aucune demande de paiement trouvée.", data={"status": "none"})
-
+        # Dans get_ticket_status(), remplace le return final par :
+        return _ok(
+            f"{len(tickets_ready)} billet(s) disponible(s) sur {total_expected} attendu(s).",
+            data={
+                "status":         "approved",
+                "tickets":        tickets,
+                "tickets_ready":  len(tickets_ready),
+                "tickets_total":  total_expected,
+                "pending_count":  sum(1 for p in payment_result.data if p["status"] == "pending"),
+                "rejected_count": sum(1 for p in payment_result.data if p["status"] == "rejected"),
+            }
+        )
     # Dernière demande = référence pour le statut global
     latest = payment_result.data[0]
     latest_status = latest["status"]
