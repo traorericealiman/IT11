@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { registerUser } from './api/inscription';
-import { loginUser } from './api/login';
+import { registerUser } from '../api/inscription';
+import { loginUser } from '../api/login';
 import { useNavigate } from 'react-router-dom';
 
 type Mode = 'login' | 'register';
@@ -171,6 +171,14 @@ export default function AuthPage() {
 
   const [alert, setAlert] = useState<{ type: AlertType; message: string } | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const switchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (successTimerRef.current) clearTimeout(successTimerRef.current);
+      if (switchTimerRef.current) clearTimeout(switchTimerRef.current);
+    };
+  }, []);
 
   const showAlert = (type: 'success' | 'error', message: string) => {
     if (successTimerRef.current) clearTimeout(successTimerRef.current);
@@ -218,18 +226,20 @@ export default function AuthPage() {
           confirm:   form.confirm,
         });
         setForm({ firstName: '', lastName: '', phoneNumber: '', password: '', confirm: '' });
-        showAlert('success', 'Compte créé avec succès ! Vous pouvez maintenant vous connecter.');
+        showAlert('success', 'Compte créé avec succès !');
+
+        switchTimerRef.current = setTimeout(() => switchMode('login'), 2000);
+
       } catch (err: any) {
         showAlert('error', err.message || 'Une erreur est survenue. Veuillez réessayer.');
       } finally {
         setLoading(false);
       }
     } else {
-      // ── CONNEXION ────────────────────────────────────────────
       setLoading(true);
       try {
         await loginUser({ phone: fullPhone, password: form.password });
-        showAlert('success', 'Connexion réussie ! Redirection en cours...');
+        showAlert('success', 'Connexion réussie !');
         setTimeout(() => navigate('/randonnée'), 1200);
       } catch (err: any) {
         showAlert('error', err.message || 'Une erreur est survenue. Veuillez réessayer.');
@@ -259,6 +269,9 @@ export default function AuthPage() {
           toggle: () => setShowConfirm(v => !v), show: showConfirm,
         },
       ];
+
+  const passwordsMatch = form.password === form.confirm && form.confirm.length > 0;
+  const passwordsMismatch = form.password !== form.confirm && form.confirm.length > 0;
 
   return (
     <>
@@ -404,7 +417,13 @@ export default function AuthPage() {
                       onFocus={() => setFocused(field.key)}
                       onBlur={() => setFocused(null)}
                       className={`w-full px-5 py-4 pr-12 rounded-2xl outline-none transition-all duration-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium border-2 bg-white shadow-sm ${
-                        focused === field.key ? 'border-blue-500 ring-4 ring-blue-50 shadow-blue-100' : 'border-slate-300 hover:border-slate-400'
+                        focused === field.key
+                          ? 'border-blue-500 ring-4 ring-blue-50 shadow-blue-100'
+                          : field.key === 'confirm' && passwordsMismatch
+                          ? 'border-red-400'
+                          : field.key === 'confirm' && passwordsMatch
+                          ? 'border-emerald-400'
+                          : 'border-slate-300 hover:border-slate-400'
                       }`}
                       required
                     />
@@ -426,6 +445,29 @@ export default function AuthPage() {
                       )}
                     </button>
                   </div>
+
+                  {/* ── Indicateur correspondance mots de passe ── */}
+                  {field.key === 'confirm' && form.confirm.length > 0 && (
+                    <div className={`flex items-center gap-1.5 mt-2 ml-1 text-xs font-semibold transition-all duration-200 ${
+                      passwordsMatch ? 'text-emerald-600' : 'text-red-500'
+                    }`}>
+                      {passwordsMatch ? (
+                        <>
+                          <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                          </svg>
+                          Les mots de passe correspondent.
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          Les mots de passe ne correspondent pas.
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
 

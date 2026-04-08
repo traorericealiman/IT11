@@ -6,6 +6,8 @@ export const API = {
   login:          `${BASE_URL}/login`,
   requestPayment: `${BASE_URL}/payment/request`,
   approvePayment: (requestId: string) => `${BASE_URL}/payment/approve/${requestId}`,
+  ticketStatus:   `${BASE_URL}/student/ticket-status`,
+  downloadTicket: (ticketId: string) => `${BASE_URL}/student/ticket/${ticketId}/download`,
 };
 
 export const WAVE_LINKS: Record<number, string> = {

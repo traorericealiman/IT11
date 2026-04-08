@@ -114,7 +114,7 @@ export default function BookingCard({ studentId }: BookingCardProps) {
           {/* Phone field */}
           <div className="mb-5">
             <label className="block text-xs font-semibold uppercase text-[#8a92a6] tracking-[0.1em] mb-2">
-              Numéro Wave
+              Numéro Wave (mettez exactement celui qui effectuera le paiement)
             </label>
             <input
               type="tel"
