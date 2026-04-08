@@ -93,43 +93,33 @@ def get_ticket_status():
         .execute()
     )
 
+    # ✅ FIX : si aucune demande, retourner "none" immédiatement
     if not payment_result.data:
-        # Dans get_ticket_status(), remplace le return final par :
-        return _ok(
-            f"{len(tickets_ready)} billet(s) disponible(s) sur {total_expected} attendu(s).",
-            data={
-                "status":         "approved",
-                "tickets":        tickets,
-                "tickets_ready":  len(tickets_ready),
-                "tickets_total":  total_expected,
-                "pending_count":  sum(1 for p in payment_result.data if p["status"] == "pending"),
-                "rejected_count": sum(1 for p in payment_result.data if p["status"] == "rejected"),
-            }
-        )
-    # Dernière demande = référence pour le statut global
-    latest = payment_result.data[0]
+        return _ok("Aucune demande.", data={"status": "none"})
+
+    payments = payment_result.data
+    latest = payments[0]
     latest_status = latest["status"]
 
-    # Nombre total de tickets attendus (somme des quantity approuvées)
-    total_expected = sum(
-        p["quantity"] for p in payment_result.data if p["status"] == "approved"
-    )
+    # Comptes utiles
+    total_expected = sum(p["quantity"] for p in payments if p["status"] == "approved")
+    pending_count  = sum(1 for p in payments if p["status"] == "pending")
+    rejected_count = sum(1 for p in payments if p["status"] == "rejected")
 
-    # 2. Pending : aucune demande approuvée
-    if latest_status == "pending" and total_expected == 0:
-        return _ok(
-            "Vous avez une demande de paiement en cours.",
-            data={"status": "pending", "payment_request_id": latest["id"]}
-        )
+    # 2. Aucune demande approuvée → pending ou rejected
+    if total_expected == 0:
+        if latest_status == "pending":
+            return _ok(
+                "Vous avez une demande de paiement en cours.",
+                data={"status": "pending", "payment_request_id": latest["id"]}
+            )
+        if latest_status == "rejected":
+            return _ok(
+                f"Votre demande a été refusée. En cas d'erreur, contactez le {SUPPORT_PHONE}.",
+                data={"status": "rejected", "support_phone": SUPPORT_PHONE}
+            )
 
-    # 3. Rejeté : dernière demande refusée et aucun ticket approuvé
-    if latest_status == "rejected" and total_expected == 0:
-        return _ok(
-            f"Votre demande a été refusée. En cas d'erreur, contactez le {SUPPORT_PHONE}.",
-            data={"status": "rejected", "support_phone": SUPPORT_PHONE}
-        )
-
-    # 4. Au moins une demande approuvée → récupérer les tickets disponibles
+    # 3. Au moins une demande approuvée → récupérer les tickets
     tickets_result = (
         supabase
         .table("tickets")
@@ -141,18 +131,17 @@ def get_ticket_status():
 
     tickets_ready = tickets_result.data or []
 
-    # Générer une URL signée pour chaque ticket
     tickets = []
     for t in tickets_ready:
-        # ticket_url contient le path dans le bucket, ex: "tickets/mon-fichier.pdf"
         signed = _signed_url(t["ticket_url"])
         tickets.append({
             "id":          t["id"],
             "ticket_code": t["ticket_code"],
-            "ticket_url":  signed or t["ticket_url"],  
+            "ticket_url":  signed or t["ticket_url"],
             "created_at":  t["created_at"],
         })
 
+    # ✅ FIX : on inclut TOUJOURS pending_count et rejected_count
     return _ok(
         f"{len(tickets_ready)} billet(s) disponible(s) sur {total_expected} attendu(s).",
         data={
@@ -160,9 +149,10 @@ def get_ticket_status():
             "tickets":        tickets,
             "tickets_ready":  len(tickets_ready),
             "tickets_total":  total_expected,
+            "pending_count":  pending_count,   # ✅ était manquant
+            "rejected_count": rejected_count,  # ✅ était manquant
         }
     )
-
 
 # ──────────────────────────────────────────────────────────────
 #  GET /student/ticket/<ticket_id>/download
